@@ -1,6 +1,5 @@
 use gtest::{Log, Program, System};
-use hello_world::TmgAction;
-use hello_world::TmgEvent;
+use game_io::{TmgAction, TmgEvent};
 
 #[test]
 fn hello_test() {
