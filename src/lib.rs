@@ -11,7 +11,8 @@ pub struct Tamagotchi {
     pub entertained: u64,
     pub entertained_block: u64,
     pub rested: u64,
-    pub rested_block: u64
+    pub rested_block: u64,
+    pub allowed_account: Option<ActorId>
 }
 const HUNGER_PER_BLOCK :u64 = 1; //: how much Tamagotchi becomes hungry for the block ;
 const ENERGY_PER_BLOCK :u64 = 2; // - how much Tamagotchi loses energy per block;
@@ -82,6 +83,7 @@ extern "C" fn init() {
             entertained_block: _current_block,
             rested: FILL_PER_SLEEP,
             rested_block: _current_block,
+            allowed_account: Some(msg::source()),
         });
     }
 
@@ -135,6 +137,21 @@ extern "C" fn handle() {
         TmgAction::Sleep => {
             tamagotchi.sleep();
             msg::reply(TmgEvent::Slept, 0).expect("Error in reply `TmgEvent::Slept`");
+        }
+        TmgAction::Transfer(new_owner) => {
+            tamagotchi.owner = new_owner;
+            msg::reply(TmgEvent::Transfer(new_owner), 0)
+                .expect("Error in reply `TmgEvent::Transfer`");
+        }
+        TmgAction::Approve(allowed_account) => {
+            tamagotchi.allowed_account = Some(allowed_account);
+            msg::reply(TmgEvent::Approve(allowed_account), 0)
+                .expect("Error in reply `TmgEvent::Approve`");
+        }
+        TmgAction::RevokeApproval => {
+            tamagotchi.allowed_account = None;
+            msg::reply(TmgEvent::RevokeApproval, 0)
+                .expect("Error in reply `TmgEvent::RevokeApproval`");
         }
     }
 }
