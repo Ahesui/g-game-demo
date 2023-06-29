@@ -13,7 +13,7 @@ pub struct Tamagotchi {
     pub rested: u64,
     pub rested_block: u64
 }
-const HUNGER_PER_BLOCK :u64 = 1; //: how much Tamagotchi becomes hungry for the block;
+const HUNGER_PER_BLOCK :u64 = 1; //: how much Tamagotchi becomes hungry for the block ;
 const ENERGY_PER_BLOCK :u64 = 2; // - how much Tamagotchi loses energy per block;
 const BOREDOM_PER_BLOCK :u64 = 2; // - how bored Tamagotchi gets per block;
 const FILL_PER_SLEEP :u64 = 1000; // - how much energy Tamagotchi gets per sleep;
