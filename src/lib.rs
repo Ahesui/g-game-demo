@@ -11,7 +11,8 @@ pub struct Tamagotchi {
     pub entertained: u64,
     pub entertained_block: u64,
     pub rested: u64,
-    pub rested_block: u64
+    pub rested_block: u64,
+    pub allowed_account: Option<ActorId>
 }
 const HUNGER_PER_BLOCK :u64 = 1; //: how much Tamagotchi becomes hungry for the block ;
 const ENERGY_PER_BLOCK :u64 = 2; // - how much Tamagotchi loses energy per block;
@@ -23,7 +24,24 @@ const FILL_PER_ENTERTAINMENT :u64 = 1000;  // - how much Tamagotchi becomes happ
 static mut TAMAGOTCHI: Option<Tamagotchi> = None;
 
 impl Tamagotchi {
-    
+    fn get_current_feed(&mut self) -> u64  {
+        let _current_block = exec::block_height() as u64;
+        let  hungry_val = (_current_block - self.fed_block)*HUNGER_PER_BLOCK;
+        self.fed  =  if self.fed > hungry_val {self.fed -hungry_val } else { 0 };
+        self.fed
+    }
+    fn get_current_entertained(&mut self) -> u64  {
+        let _current_block = exec::block_height() as u64;
+        let borring_val = (_current_block - self.entertained_block)*BOREDOM_PER_BLOCK;
+        self.entertained =  if self.entertained > borring_val { self.entertained-borring_val } else { 0 }; 
+        self.entertained
+    }
+    fn get_current_rested(&mut self) -> u64  {
+        let _current_block = exec::block_height() as u64;
+        let energy_val = (_current_block - self.rested_block)*ENERGY_PER_BLOCK;
+        self.rested =  if self.rested > energy_val { self.rested-energy_val } else { 0 }; 
+        self.rested
+    }
     fn calculate_age(&self) -> u64 {
         let _current_timestamp =  exec::block_timestamp();
         let seconds_per_year: u64 = 365 * 24 * 3600;
@@ -31,30 +49,21 @@ impl Tamagotchi {
     }
 
     fn feed(&mut self) {      
-        let _current_timestamp =  exec::block_timestamp();
-        let _current_block = exec::block_height() as u64;
-        let mut hungry_val = (_current_block - self.fed_block)*HUNGER_PER_BLOCK;
-        hungry_val =  if hungry_val>0 {hungry_val } else { 0 }; 
-        self.fed = hungry_val + 1;
-        self.fed_block = _current_block;
+        self.fed  = self.get_current_feed();
+        self.fed += FILL_PER_FEED;
+        self.fed_block =  exec::block_height() as u64;
     }
 
     fn play(&mut self) {
-        let _current_timestamp =  exec::block_timestamp();
-        let _current_block = exec::block_height() as u64;
-        let mut happy_val = (_current_block - self.entertained_block)*BOREDOM_PER_BLOCK;
-        happy_val =  if happy_val>0 { happy_val } else { 0 }; 
-        self.entertained = happy_val + 1;
-        self.entertained_block = _current_block;
+        self.entertained = self.get_current_entertained();
+        self.entertained += FILL_PER_ENTERTAINMENT;
+        self.entertained_block = exec::block_height() as u64;
     }
 
     fn sleep(&mut self) {
-        let _current_timestamp =  exec::block_timestamp();
-        let _current_block = exec::block_height() as u64;
-        let mut energy_val = (_current_block - self.rested_block)*ENERGY_PER_BLOCK;
-        energy_val =  if energy_val>0 { energy_val } else { 0 }; 
-        self.rested = energy_val + 1;
-        self.rested_block = _current_block;
+        self.rested = self.get_current_rested(); 
+        self.rested += FILL_PER_SLEEP;
+        self.rested_block = exec::block_height() as u64;
     }
 
 }
@@ -82,10 +91,9 @@ extern "C" fn init() {
             entertained_block: _current_block,
             rested: FILL_PER_SLEEP,
             rested_block: _current_block,
+            allowed_account: Some(msg::source()),
         });
     }
-
-    msg::reply((), 0).expect("Failed to send initialization reply");
 }
 
 #[no_mangle]
@@ -96,15 +104,11 @@ extern "C" fn metahash() {
 
 #[no_mangle]
 extern "C" fn state() {
-    let tamagotchi = unsafe {
-        TAMAGOTCHI
-            .as_ref()
-            .expect("The contract is not initialized");
-    };
+    let mut tamagotchi = unsafe {TAMAGOTCHI.get_or_insert(Default::default()) };
+    tamagotchi.fed = tamagotchi.get_current_feed();
+    tamagotchi.entertained = tamagotchi.get_current_entertained();
+    tamagotchi.rested = tamagotchi.get_current_rested();
     msg::reply(tamagotchi, 0).expect("Failed to share state");
-
-      
-
 }
 
 #[no_mangle]
@@ -112,7 +116,7 @@ extern "C" fn handle() {
 
 
     let action: TmgAction = msg::load().expect("Unable to decode `TmgAction`");
-    let tamagotchi = unsafe { TAMAGOTCHI.as_mut().expect("Program hasn't been initialized") };
+    let mut tamagotchi = unsafe { TAMAGOTCHI.as_mut().expect("Program hasn't been initialized") };
     match action {
         TmgAction::Name => {
             msg::reply(TmgEvent::Name(tamagotchi.name.clone()), 0)
@@ -135,6 +139,41 @@ extern "C" fn handle() {
         TmgAction::Sleep => {
             tamagotchi.sleep();
             msg::reply(TmgEvent::Slept, 0).expect("Error in reply `TmgEvent::Slept`");
+        }
+        TmgAction::Transfer(new_owner) => {
+            assert_eq!(
+                msg::source(),
+                tamagotchi.owner,
+                "Only owner can set new_owner"
+            );
+            tamagotchi.owner = new_owner;
+            msg::reply(TmgEvent::Transfer(new_owner), 0)
+                .expect("Error in reply `TmgEvent::Transfer`");
+        }
+        TmgAction::Approve(allowed_account) => {
+            assert_eq!(
+                msg::source(),
+                tamagotchi.owner,
+                "Only owner can set allowed_account"
+            );
+            assert_eq!(
+                allowed_account,
+                tamagotchi.owner,
+                "Please set a new allowed_account"
+            );
+            tamagotchi.allowed_account = Some(allowed_account);
+            msg::reply(TmgEvent::Approve(allowed_account), 0)
+                .expect("Error in reply `TmgEvent::Approve`");
+        }
+        TmgAction::RevokeApproval => {
+            assert_eq!(
+                msg::source(),
+                tamagotchi.owner,
+                "Only owner can revoke approval"
+            );
+            tamagotchi.allowed_account = Some(tamagotchi.owner);
+            msg::reply(TmgEvent::RevokeApproval, 0)
+                .expect("Error in reply `TmgEvent::RevokeApproval`");
         }
     }
 }
